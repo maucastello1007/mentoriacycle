@@ -1,0 +1,5 @@
+servidor/node_modules/
+servidor/dist/
+.env
+.env.local
+*.sqlite*
