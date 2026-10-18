@@ -12,6 +12,8 @@ config.d1_databases[0].database_name=deployment.database_name;
 config.d1_databases[0].database_id=deployment.database_id;
 config.workers_dev=false;
 config.preview_urls=false;
+// 03:55 UTC is 23:55 on the previous local day in Cuiabá (UTC-4).
+config.triggers={...config.triggers,crons:['55 3 * * *']};
 // Bindings must point to the database and bucket created in the owner's account.
 // Their IDs are public configuration; credentials never belong here.
 if(process.env.CYCLE_D1_DATABASE_ID)config.d1_databases[0].database_id=process.env.CYCLE_D1_DATABASE_ID;

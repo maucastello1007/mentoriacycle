@@ -1,7 +1,11 @@
+import { dailyBackup } from '../lib/daily-backup';
 import handler from 'vinext/server/fetch-handler';
 import { accessRequest,appOrigin } from '../lib/cloudflare-access';
 
 export default {
+ async scheduled(controller:ScheduledController,env:Cloudflare.Env){
+  await dailyBackup(env,controller.scheduledTime);
+ },
  async fetch(request:Request,env:Cloudflare.Env,ctx:ExecutionContext){
   try{
    const authenticated=await accessRequest(request);
