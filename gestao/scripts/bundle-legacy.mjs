@@ -1,0 +1,10 @@
+import {readFileSync,writeFileSync} from 'node:fs';
+let html=readFileSync('legacy/index.html','utf8');
+html=html.replace("let state;try{state=JSON.parse(localStorage.getItem('cycle-v1'))}catch{}",'let state=window.cycleCloud.state;');
+html=html.replace("function save(){localStorage.setItem('cycle-v1',JSON.stringify(state))}",'function save(){}');
+html=html.replace(/<script src="([^"]+)"><\/script>/g,(_,name)=>'<script>'+readFileSync('legacy/'+name,'utf8').replace(/<\/script/gi,'<\\/script')+'</script>');
+html=html.replace('<script>render();</script>','<script>'+readFileSync('legacy/cloud.js','utf8')+'</script>');
+html=html.replace(/neste navegador/g,'online').replace('Anexos ficam online e são incluídos no backup.','Anexos ficam no sistema e são incluídos no backup.');
+const index=html.indexOf('<script>');
+html=html.slice(0,index)+`<script>fetch('/api/workspace',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('Acesso ou conexão indisponível.');return r.json()}).then(data=>{window.cycleCloud=data;const template=document.getElementById('cycle-source');document.body.insertAdjacentHTML('beforeend',template.content.querySelector('main')?.outerHTML||'');const scripts=template.content.querySelectorAll('script');let i=0;function next(){if(i===scripts.length)return;const s=document.createElement('script');s.textContent=scripts[i++].textContent;document.body.append(s);next()}next()}).catch(e=>{document.getElementById('app').textContent=e.message})</script><template id="cycle-source">`+html.slice(index).replace('</body></html>','')+'</template></body></html>';
+writeFileSync('lib/legacy-bundle.ts','export const legacyHTML='+JSON.stringify(html)+';\n');

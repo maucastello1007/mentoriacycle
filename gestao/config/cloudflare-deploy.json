@@ -1,0 +1,8 @@
+{
+  "account_id": "47a389917b0be2f695c064edd1449e9a",
+  "hostname": "gestao.mauriciocastello.com.br",
+  "worker_name": "cycle-gestao",
+  "database_name": "cycle-gestao",
+  "database_id": "41ee383e-310e-4f3b-b788-68a151c250eb",
+  "r2_bucket": "cycle-gestao-arquivos"
+}
