@@ -34,3 +34,7 @@ Maurício: acesso completo. Karla: CRM e acompanhamento de leads; mentorias, fin
 - Integração dos candidatos do formulário público com o CRM.
 
 Nenhum segredo deve ser colocado no repositório. A autorização da Cloudflare fica no fluxo nativo de conexão GitHub/Workers do proprietário.
+
+## Branch de produção
+
+O Worker `cycle-gestao` deve compilar a branch `gestao-cycle`, com diretório raiz `gestao`. A branch `main` mantém o formulário público.
