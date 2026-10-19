@@ -13,5 +13,5 @@ export function validateLead(v:unknown):Lead{const l=v as Lead;
  try{new Intl.DateTimeFormat('pt-BR',{timeZone:l.zone})}catch{throw new Response('Fuso inválido.',{status:400})}
  if(l.phase==='Encerrado'&&!l.reason.trim())throw new Response('Registre o motivo do encerramento.',{status:400});
  if(!['Encerrado','Ganho'].includes(l.phase)&&!l.doNotContact&&(!l.nextAction.trim()||!l.nextDate))throw new Response('Defina a próxima ação e a data.',{status:400});
- if(['Qualificado CYCLE','Agendado'].includes(l.phase)&&(!l.permission||l.doNotContact||!l.aware||['pain','goal','autonomy','time','decision','investment'].some(k=>!l.answers[k]?.trim())))throw new Response('Complete a qualificação, a autorização e a ciência do formato e investimento.',{status:400});
+ if(['Qualificado CYCLE','Agendado'].includes(l.phase)&&(!l.permission||l.doNotContact||!l.aware))throw new Response('Confirme a autorização de contato e a ciência do formato e investimento para esta etapa. As perguntas são opcionais.',{status:400});
  if(l.phase==='Agendado'&&(!l.meeting||l.calendarStatus!=='Confirmado'))throw new Response('Confirme a reunião na agenda antes de marcar Agendado.',{status:400});return l}

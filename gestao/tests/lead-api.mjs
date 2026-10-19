@@ -59,3 +59,16 @@ assert.equal(JSON.parse(records.get(lead.id).payload).answers.pain,'Resposta atu
 assert.equal((await route.PUT(request({...updated,phase:'Ganho'}),params)).status,403,'SDR restrictions must remain');
 assert.equal((await route.PUT(request({...updated,answers:{unexpected:'invalid'}}),params)).status,400,'Invalid answer keys must remain rejected');
 console.log('Lead API checks passed: SDR save, owner/SDR readback of all 13 answers, update, stale-write protection and role restrictions.');
+
+let optionalBase=updated;
+for(const userRole of ['sdr','owner']){
+ role=userRole;email=userRole+'@example.test';
+ for(const phase of ['Qualificado CYCLE','Agendado']){
+  const partial={...optionalBase,phase,answers:{},meeting:'2026-10-21T13:00:00.000Z',calendarStatus:'Confirmado'};
+  const response=await route.PUT(request(partial),params);assert.equal(response.status,200,phase+' must allow unanswered questions for '+userRole);
+  optionalBase=await response.json();assert.deepEqual(optionalBase.answers,{});
+  assert.deepEqual((await (await route.GET(new Request('https://example.test/api/leads/'+lead.id),params)).json()).answers,{});
+ }
+}
+assert.equal((await route.PUT(request({...optionalBase,meeting:''}),params)).status,400,'Scheduled meetings still require date and confirmation');
+console.log('Optional qualification checks passed for both profiles, including blank answers in Qualificado and Agendado.');
