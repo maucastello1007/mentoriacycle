@@ -4,6 +4,7 @@ import { leads } from '@/db/schema';
 import { and,eq } from 'drizzle-orm';
 import { validateLead } from '@/lib/lead';
 export const dynamic='force-dynamic';
+export async function GET(_:Request,{params}:{params:Promise<{id:string}>}){try{await access();const {id}=await params;const row=(await getDb().select().from(leads).where(eq(leads.id,id)))[0];if(!row)return json({error:'Lead não encontrado.'},404);return json({...JSON.parse(row.payload),id:row.id,version:row.version,updatedAt:row.updatedAt,updatedBy:row.updatedBy})}catch(e){return failure(e)}}
 export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}){try{
  const {user,role}=await access();sameOrigin(request);const {id}=await params;const l=validateLead(await body(request));if(l.id!==id)return json({error:'ID inválido.'},400);
  const db=getDb();const previous=(await db.select().from(leads).where(eq(leads.id,id)))[0];
@@ -15,4 +16,4 @@ export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}
  const row={id,payload:JSON.stringify(clean),version:l.version+1,updatedAt:new Date().toISOString(),updatedBy:user.email};
  const changed=previous?await db.update(leads).set(row).where(and(eq(leads.id,id),eq(leads.version,l.version))).returning():await db.insert(leads).values(row).onConflictDoNothing().returning();
  if(!changed.length)return json({error:'Atualização concorrente. Recarregue.',conflict:true},409);
- return json({...clean,version:row.version,updatedAt:row.updatedAt,updatedBy:row.updatedBy});}catch(e){return failure(e)}}
+ const stored=changed[0];return json({...JSON.parse(stored.payload),id:stored.id,version:stored.version,updatedAt:stored.updatedAt,updatedBy:stored.updatedBy});}catch(e){return failure(e)}}

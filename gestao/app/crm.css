@@ -3,3 +3,5 @@
 .cycle-shell input{accent-color:#111}.cycle-shell :is(button,a,input,select,textarea):focus-visible{outline:2px solid #888;outline-offset:3px}
 
 .cycle-shell button:hover{background:#e6e6e6;color:#202020}.cycle-shell button.solid:hover{background:#303030;color:#fff}.cycle-side nav button:hover{background:#303030;color:#fff}.cycle-side nav button.selected:hover{background:#c8c8c8;color:#111}.cycle-shell .tabs button.active:hover{background:#c8c8c8;color:#111}
+
+.cycle-main{padding-bottom:130px}.editor-save-bar{position:fixed;left:286px;right:36px;bottom:16px;z-index:50;background:#111;color:#fff;border:1px solid #444;border-radius:12px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;box-shadow:0 4px 24px #0003}.editor-save-bar span{font-size:13px;line-height:1.6}.editor-save-bar button.solid{background:#fff;color:#111;border-color:#fff;flex-shrink:0}.editor-save-bar button.solid:hover{background:#ddd;color:#111}@media(max-width:1000px){.editor-save-bar{left:235px;right:25px}}@media(max-width:650px){.editor-save-bar{left:12px;right:12px;bottom:10px;padding:12px;gap:10px}.cycle-main{padding-bottom:160px}}
