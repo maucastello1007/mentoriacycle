@@ -1,0 +1,13 @@
+'use client';
+import {useEffect,useState} from 'react';
+import './member-area.css';
+type Task={id:string;stage:string;title:string;instructions:string;date:string;done:boolean};
+type Tasks={name:string;version:number;tasks:Task[]};
+export default function MemberArea(){
+ const [data,setData]=useState<Tasks|null>(null),[message,setMessage]=useState('Carregando suas tarefas…'),[busy,setBusy]=useState(false);
+ async function request(method='GET',payload?:unknown){const r=await fetch('/api/member',{method,cache:'no-store',headers:payload?{'Content-Type':'application/json'}:undefined,body:payload?JSON.stringify(payload):undefined});const raw=await r.text();let value;try{value=JSON.parse(raw)}catch{value={error:raw}}if(!r.ok)throw Error(value.error||'Não foi possível carregar suas tarefas.');return value as Tasks}
+ async function load(){setBusy(true);try{setData(await request());setMessage('Tarefas atualizadas.')}catch(e){setData(null);setMessage((e as Error).message)}finally{setBusy(false)}}
+ useEffect(()=>{void load()},[]);
+ async function complete(task:Task){if(!data||busy)return;setBusy(true);try{setData(await request('PATCH',{id:task.id,done:!task.done,version:data.version}));setMessage(task.done?'Tarefa reaberta.':'Conclusão salva. Seu mentor já pode acompanhar.')}catch(e){setMessage((e as Error).message)}finally{setBusy(false)}}
+ return <main className="member-area"><header><div><span className="member-brand">CYCLE ∞</span><p>Seu espaço de mentoria</p></div><a href="/signout-with-chatgpt?return_to=%2Ftarefas">Sair da conta</a></header><section className="member-intro"><p>UM PRÓXIMO PASSO DE CADA VEZ</p><h1>{data?`Olá, ${data.name}.`:'Suas tarefas'}</h1><p>Consulte as orientações e registre cada atividade concluída.</p><button disabled={busy} onClick={()=>{void load()}}>Atualizar tarefas</button></section><p role="status" aria-live="polite">{message}</p>{data&&<><p>{data.tasks.filter(t=>t.done).length} de {data.tasks.length} tarefas concluídas</p>{!data.tasks.length&&<section className="member-card"><h2>Seu acompanhamento está pronto.</h2><p>As tarefas aparecerão aqui assim que seu mentor as liberar.</p></section>}{Array.from(new Set(data.tasks.map(t=>t.stage))).map(stage=><section key={stage}><h2>{stage}</h2>{data.tasks.filter(t=>t.stage===stage).map(task=><article className="member-card" key={task.id}><h3>{task.title}</h3>{task.date&&<p>Prazo: {/^\d{4}-\d{2}-\d{2}$/.test(task.date)?task.date.split('-').reverse().join('/'):task.date}</p>}{task.instructions&&<p className="member-instructions">{task.instructions}</p>}<label><input type="checkbox" checked={task.done} disabled={busy} onChange={()=>{void complete(task)}}/>{task.done?'Concluída':'Marcar como concluída'}</label></article>)}</section>)}</>}</main>;
+}

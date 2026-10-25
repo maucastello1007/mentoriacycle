@@ -1,5 +1,4 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
-import { roleFor } from './roles.ts';
 
 export const accessIssuer='https://icy-glade-f82f.cloudflareaccess.com';
 export const accessAudience='a3c25c511fff783518fe1a2d6205f15db65c96b7e922162aa77410fa06cc0950';
@@ -14,7 +13,9 @@ export async function accessRequest(request:Request,keys:JWTVerifyGetKey=publicK
  let payload;
  try{({payload}=await jwtVerify(token,keys,{issuer:accessIssuer,audience:accessAudience,algorithms:['RS256'],requiredClaims:['exp','iat','sub','email']}))}
  catch{throw new Response('Login inválido ou expirado. Entre novamente.',{status:401,headers:{'Cache-Control':'no-store'}})}
- if(typeof payload.email!=='string'||typeof payload.sub!=='string'||!payload.sub||!roleFor(payload.email))throw new Response('Este e-mail não tem acesso ao Cycle.',{status:403});
+ // A verified identity can reach the member area. Each API separately enforces
+ // staff roles or the exact e-mail linked to an individual accompaniment.
+ if(typeof payload.email!=='string'||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)||typeof payload.sub!=='string'||!payload.sub)throw new Response('Este e-mail não tem acesso ao Cycle.',{status:403});
  const headers=new Headers(request.headers);
  for(const name of [...headers.keys()])if(name.toLowerCase().startsWith('oai-authenticated-user-'))headers.delete(name);
  headers.set('oai-authenticated-user-id',payload.sub);

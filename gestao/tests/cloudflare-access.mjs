@@ -10,7 +10,9 @@ async function token(email='karla.domingos@outlook.com',options={}){
 const request=t=>new Request('https://gestao.mauriciocastello.com.br/api/workspace',{headers:{'Cf-Access-Jwt-Assertion':t,'oai-authenticated-user-email':'mauriciocastellostop@gmail.com','oai-authenticated-user-id':'forged-owner'}});
 const rejected=async(p,status)=>{await assert.rejects(p,e=>e instanceof Response&&e.status===status)};
 await rejected(accessRequest(new Request('https://gestao.mauriciocastello.com.br/',{headers:{'oai-authenticated-user-email':'mauriciocastellostop@gmail.com'}}),keys),401);
-await rejected(accessRequest(request(await token('outra@exemplo.com')),keys),403);
+const member=await accessRequest(request(await token('mentorado@exemplo.com')),keys);
+assert.equal(member.headers.get('oai-authenticated-user-email'),'mentorado@exemplo.com');
+await rejected(accessRequest(request(await token('email-invalido')),keys),403);
 await rejected(accessRequest(request(await token(undefined,{audience:'outra-aplicacao'})),keys),401);
 await rejected(accessRequest(request(await token(undefined,{issuer:'https://outra.cloudflareaccess.com'})),keys),401);
 await rejected(accessRequest(request(await token(undefined,{expired:true})),keys),401);
