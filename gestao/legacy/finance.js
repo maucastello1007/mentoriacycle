@@ -93,41 +93,69 @@ function cashForecast(people, today) {
     return {key:financeMonthKey(year, month),amount:0,rows:[]};
   });
   const byMonth = new Map(months.map(month=>[month.key,month]));
+  const received = new Map();
+  const receivedUndated = [], overdueRows = [];
   let overdue = 0, undated = 0;
   for (const person of people) {
     for (const payment of Array.isArray(person.payments) ? person.payments : []) {
       const amount = Number(payment?.amount);
-      if (!payment || payment.paid || !Number.isSafeInteger(amount) || amount <= 0) continue;
+      if (!payment || !Number.isSafeInteger(amount) || amount <= 0) continue;
+      const row = {name:person.name,label:payment.name,date:payment.due,amount};
+      if (payment.paid) {
+        row.date = payment.paidDate;
+        if (!financeDate(row.date)) { receivedUndated.push(row); continue; }
+        const key = row.date.slice(0,7);
+        if (!received.has(key)) received.set(key,[]);
+        received.get(key).push(row);
+        continue;
+      }
       if (!financeDate(payment.due)) { undated += amount; continue; }
-      if (payment.due < today) { overdue += amount; continue; }
+      if (payment.due < today) { overdue += amount; overdueRows.push(row); continue; }
       const month = byMonth.get(payment.due.slice(0,7));
       if (!month) continue;
       month.amount += amount;
-      month.rows.push({name:person.name,label:payment.name,due:payment.due,amount});
+      month.rows.push(row);
     }
   }
-  return {months,overdue,undated};
+  return {months,received,receivedUndated,overdue,overdueRows,undated};
+}
+
+const cashMonthLabel = key => financeMonthLabel.format(new Date(key+'-01T00:00:00Z'));
+const cashTotal = rows => rows.reduce((sum,row)=>sum+row.amount,0);
+
+function cashRows(rows, newestFirst=false) {
+  const ordered = [...rows].sort((a,b)=>newestFirst ? (b.date||'').localeCompare(a.date||'') : (a.date||'').localeCompare(b.date||''));
+  return `<ul>${ordered.map(row=>`<li>${financeDate(row.date)?financeDateLabel(row.date)+' · ':''}${esc(row.name)} · ${esc(row.label || 'Parcela')} · ${money(row.amount)}</li>`).join('')}</ul>`;
 }
 
 function renderCashFlow() {
-  const {months,overdue,undated} = cashForecast(state.people,todayLocal());
+  const {months,received,receivedUndated,overdue,overdueRows,undated} = cashForecast(state.people,todayLocal());
   const total = months.reduce((sum,month)=>sum+month.amount,0);
+  const receivedTotal = [...received.values()].reduce((sum,rows)=>sum+cashTotal(rows),cashTotal(receivedUndated));
   const peak = Math.max(1,...months.map(month=>month.amount));
   return `<header><div><div class="tag">Financeiro da mentoria</div><h2>Fluxo de caixa</h2>
-    <p class="muted">Previsão de recebimentos do mês atual e dos 11 meses seguintes.</p></div></header>
+    <p class="muted">Acompanhe o histórico recebido e as parcelas a vencer nos próximos 12 meses, incluindo o mês atual.</p></div></header>
     <div class="grid">
-      <div class="card"><div class="muted">Previsto no período</div><h2>${money(total)}</h2></div>
-      <div class="card"><div class="muted">Em atraso</div><h2>${money(overdue)}</h2></div>
+      <div class="card"><div class="muted">A vencer no período</div><h2>${money(total)}</h2></div>
+      <div class="card"><div class="muted">Recebido no histórico</div><h2>${money(receivedTotal)}</h2></div>
+      <div class="card"><div class="muted">Em atraso</div><h2>${money(overdue)}</h2>${overdueRows.length?`<details><summary>Ver parcelas em atraso</summary>${cashRows(overdueRows)}</details>`:''}</div>
       <div class="card"><div class="muted">Sem vencimento cadastrado</div><h2>${money(undated)}</h2></div>
     </div>
-    <section class="card"><h3>Entradas previstas por mês</h3>
+    <section class="card"><h3>Parcelas a vencer por mês</h3>
     ${months.map(month=>`<details style="border-bottom:1px solid #d5d5d5;padding:12px 0">
-      <summary style="cursor:pointer"><strong>${financeMonthLabel.format(new Date(month.key+'-01T00:00:00Z'))}</strong>
+      <summary style="cursor:pointer"><strong>${cashMonthLabel(month.key)}</strong>
       · ${money(month.amount)} · ${month.rows.length} parcela(s)</summary>
       <meter aria-label="Recebimento previsto em relação ao maior mês" value="${month.amount}" max="${peak}" style="width:100%;height:12px;margin-top:5px"></meter>
-      ${month.rows.length ? `<ul>${month.rows.sort((a,b)=>a.due.localeCompare(b.due)).map(row=>`<li>${financeDateLabel(row.due)} · ${esc(row.name)} · ${esc(row.label || 'Parcela')} · ${money(row.amount)}</li>`).join('')}</ul>` : '<p class="muted">Nenhuma parcela prevista.</p>'}
+      ${month.rows.length ? cashRows(month.rows) : '<p class="muted">Nenhuma parcela a vencer.</p>'}
     </details>`).join('')}
-    <p class="muted">A projeção soma parcelas em aberto com vencimento no período. Valores em atraso e sem vencimento aparecem acima.</p></section>`;
+    </section>
+    <section class="card"><h3>Parcelas recebidas por mês</h3>
+    <p class="muted">Histórico agrupado pela data em que o pagamento foi recebido.</p>
+    ${[...received.keys()].sort().reverse().map(key=>`<details style="border-bottom:1px solid #d5d5d5;padding:12px 0">
+      <summary style="cursor:pointer"><strong>${cashMonthLabel(key)}</strong> · ${money(cashTotal(received.get(key)))} · ${received.get(key).length} parcela(s)</summary>
+      ${cashRows(received.get(key),true)}</details>`).join('')}
+    ${receivedUndated.length?`<details><summary>Sem data de recebimento · ${money(cashTotal(receivedUndated))}</summary>${cashRows(receivedUndated)}</details>`:''}
+    ${!received.size&&!receivedUndated.length?'<p class="muted">Nenhum recebimento registrado.</p>':''}</section>`;
 }
 
 const renderBeforeFinance = render;
