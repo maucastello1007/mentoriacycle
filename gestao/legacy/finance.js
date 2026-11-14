@@ -134,9 +134,21 @@ function renderCashFlow() {
   const {months,received,receivedUndated,overdue,overdueRows,undated} = cashForecast(state.people,todayLocal());
   const total = months.reduce((sum,month)=>sum+month.amount-month.late,0);
   const receivedTotal = [...received.values()].reduce((sum,rows)=>sum+cashTotal(rows),cashTotal(receivedUndated));
+  const currentMonth = months[0];
+  const receivedThisMonth = cashTotal(received.get(currentMonth.key) || []);
+  const upcomingThisMonth = currentMonth.amount - currentMonth.late;
   const peak = Math.max(1,...months.map(month=>month.amount));
   return `<header><div><div class="tag">Financeiro da mentoria</div><h2>Fluxo de caixa</h2>
     <p class="muted">Acompanhe os recebimentos e as parcelas em aberto do mês atual e dos 11 meses seguintes.</p></div></header>
+    <section class="card"><h3>Total do mês · ${cashMonthLabel(currentMonth.key)}</h3>
+      <h2>${money(receivedThisMonth + currentMonth.amount)}</h2>
+      <dl class="grid">
+        <div><dt>Recebidas</dt><dd>${money(receivedThisMonth)}</dd></div>
+        <div><dt>A vencer</dt><dd>${money(upcomingThisMonth)}</dd></div>
+        <div><dt>Vencidas e em atraso</dt><dd>${money(currentMonth.late)}</dd></div>
+      </dl>
+      <p class="muted">Recebidas pela data do pagamento. Parcelas em aberto pelo vencimento.</p>
+    </section>
     <div class="grid">
       <div class="card"><div class="muted">A vencer no período</div><h2>${money(total)}</h2></div>
       <div class="card"><div class="muted">Recebido no histórico</div><h2>${money(receivedTotal)}</h2></div>
