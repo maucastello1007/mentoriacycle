@@ -102,6 +102,7 @@ function cashForecast(people, today) {
       if (!payment || !Number.isSafeInteger(amount) || amount <= 0) continue;
       const row = {name:person.name,label:payment.name,date:payment.due,amount};
       if (payment.paid) {
+        row.paid = true;
         row.date = payment.paidDate;
         if (!financeDate(row.date)) { receivedUndated.push(row); continue; }
         const key = row.date.slice(0,7);
@@ -127,7 +128,7 @@ const cashTotal = rows => rows.reduce((sum,row)=>sum+row.amount,0);
 
 function cashRows(rows, newestFirst=false) {
   const ordered = [...rows].sort((a,b)=>newestFirst ? (b.date||'').localeCompare(a.date||'') : (a.date||'').localeCompare(b.date||''));
-  return `<ul>${ordered.map(row=>`<li>${financeDate(row.date)?financeDateLabel(row.date)+' · ':''}${esc(row.name)} · ${esc(row.label || 'Parcela')} · ${money(row.amount)}${row.late?' · <strong>Em atraso</strong>':''}</li>`).join('')}</ul>`;
+  return `<ul>${ordered.map(row=>`<li>${financeDate(row.date)?financeDateLabel(row.date)+' · ':''}${esc(row.name)} · ${esc(row.label || 'Parcela')} · ${money(row.amount)}${row.paid?' · <strong>Recebida</strong>':row.late?' · <strong>Em atraso</strong>':' · A vencer'}</li>`).join('')}</ul>`;
 }
 
 function renderCashFlow() {
@@ -155,13 +156,17 @@ function renderCashFlow() {
       <div class="card"><div class="muted">Em atraso</div><h2>${money(overdue)}</h2>${overdueRows.length?`<details><summary>Ver parcelas em atraso</summary>${cashRows(overdueRows)}</details>`:''}</div>
       <div class="card"><div class="muted">Sem vencimento cadastrado</div><h2>${money(undated)}</h2></div>
     </div>
-    <section class="card"><h3>Parcelas em aberto por mês de vencimento</h3>
-    ${months.map(month=>`<details style="border-bottom:1px solid #d5d5d5;padding:12px 0">
+    <section class="card"><h3>Parcelas por mês</h3>
+    ${months.map(month=>{
+      const paidRows = received.get(month.key) || [];
+      const rows = [...month.rows,...paidRows];
+      return `<details style="border-bottom:1px solid #d5d5d5;padding:12px 0">
       <summary style="cursor:pointer"><strong>${cashMonthLabel(month.key)}</strong>
-      · ${money(month.amount)} em aberto · ${month.rows.length} parcela(s)${month.late?' · '+money(month.late)+' em atraso':''}</summary>
+      · ${money(month.amount + cashTotal(paidRows))} no total · ${money(cashTotal(paidRows))} recebido · ${money(month.amount - month.late)} a vencer${month.late?' · '+money(month.late)+' em atraso':''}</summary>
       <meter aria-label="Recebimento previsto em relação ao maior mês" value="${month.amount}" max="${peak}" style="width:100%;height:12px;margin-top:5px"></meter>
-      ${month.rows.length ? cashRows(month.rows) : '<p class="muted">Nenhuma parcela em aberto.</p>'}
-    </details>`).join('')}
+      ${rows.length ? cashRows(rows) : '<p class="muted">Nenhuma parcela neste mês.</p>'}
+    </details>`;
+    }).join('')}
     </section>
     <section class="card"><h3>Parcelas recebidas por mês</h3>
     <p class="muted">Histórico agrupado pela data em que o pagamento foi recebido.</p>
