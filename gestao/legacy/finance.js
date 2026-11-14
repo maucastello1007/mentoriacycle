@@ -13,11 +13,11 @@ function financeMonthKey(year, month) {
   return String(year).padStart(4,'0') + '-' + String(month).padStart(2,'0');
 }
 
-function installmentSchedule(total, count, firstDue) {
+function installmentSchedule(total, count, firstDue, recurringDay = Number(firstDue?.slice(-2))) {
   if (!Number.isSafeInteger(total) || !Number.isInteger(count) || count < 1 || count > 120 ||
       total < count || total > 100000000000 || !financeDate(firstDue) ||
+      !Number.isInteger(recurringDay) || recurringDay < 1 || recurringDay > 31 ||
       financeMonth(firstDue, count - 1)[0] > 9999) return [];
-  const day = Number(firstDue.slice(-2));
   const base = Math.floor(total / count);
   const remainder = total % count;
   return Array.from({length:count}, (_, index) => {
@@ -26,7 +26,7 @@ function installmentSchedule(total, count, firstDue) {
     return {
       name: 'Parcela ' + (index + 1) + '/' + count,
       amount: base + Number(index >= count - remainder),
-      due: financeMonthKey(year, month) + '-' + String(Math.min(day, last)).padStart(2,'0'),
+      due: index === 0 ? firstDue : financeMonthKey(year, month) + '-' + String(Math.min(recurringDay, last)).padStart(2,'0'),
     };
   });
 }
@@ -38,17 +38,19 @@ function renderInstallments() {
         <div><label for="installment-total">Valor total combinado (R$)</label><input id="installment-total" name="total" type="number" min="0.01" max="1000000000" step="0.01" required style="width:100%"></div>
         <div><label for="installment-count">Número de parcelas</label><input id="installment-count" name="count" type="number" min="1" max="120" step="1" value="1" required style="width:100%"></div>
         <div><label for="installment-first">Vencimento da primeira parcela</label><input id="installment-first" name="first" type="date" required style="width:100%"></div>
+        <div><label for="installment-day">Dia de vencimento das próximas parcelas</label><input id="installment-day" name="recurringDay" type="number" min="1" max="31" step="1" placeholder="Mesmo dia da primeira" style="width:100%"></div>
         <div><label for="installment-method">Forma de pagamento</label><select id="installment-method" name="method" style="width:100%">${paymentMethods.map(method=>`<option>${method}</option>`).join('')}</select></div>
       </div>
-      <p class="muted">As demais parcelas vencem no mesmo dia dos meses seguintes. Em meses mais curtos, o vencimento cai no último dia.</p>
+      <p class="muted">Se deixar o dia das próximas parcelas em branco, vale o dia da primeira. Em meses mais curtos, o vencimento cai no último dia. Registre a data em que o dinheiro entrou em “Registrar recebimento”.</p>
       <div id="installment-preview" aria-live="polite"></div>
       <button class="primary" type="submit" disabled>Adicionar parcelas</button>
     </form></section>`;
 }
 
 function installmentsFromForm(form) {
-  const {total,count,first} = form.elements;
-  return form.checkValidity() ? installmentSchedule(Math.round(total.valueAsNumber * 100), count.valueAsNumber, first.value) : [];
+  const {total,count,first,recurringDay} = form.elements;
+  const day = recurringDay.value === '' ? undefined : recurringDay.valueAsNumber;
+  return form.checkValidity() ? installmentSchedule(Math.round(total.valueAsNumber * 100), count.valueAsNumber, first.value, day) : [];
 }
 
 function previewInstallments(form) {
