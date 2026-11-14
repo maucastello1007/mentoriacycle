@@ -90,7 +90,7 @@ const financeMonthLabel = new Intl.DateTimeFormat('pt-BR',{month:'long',year:'nu
 function cashForecast(people, today) {
   const months = Array.from({length:12}, (_, index)=>{
     const [year, month] = financeMonth(today, index);
-    return {key:financeMonthKey(year, month),amount:0,rows:[]};
+    return {key:financeMonthKey(year, month),amount:0,late:0,rows:[]};
   });
   const byMonth = new Map(months.map(month=>[month.key,month]));
   const received = new Map();
@@ -110,10 +110,12 @@ function cashForecast(people, today) {
         continue;
       }
       if (!financeDate(payment.due)) { undated += amount; continue; }
-      if (payment.due < today) { overdue += amount; overdueRows.push(row); continue; }
+      row.late = payment.due < today;
+      if (row.late) { overdue += amount; overdueRows.push(row); }
       const month = byMonth.get(payment.due.slice(0,7));
       if (!month) continue;
       month.amount += amount;
+      if (row.late) month.late += amount;
       month.rows.push(row);
     }
   }
@@ -125,28 +127,28 @@ const cashTotal = rows => rows.reduce((sum,row)=>sum+row.amount,0);
 
 function cashRows(rows, newestFirst=false) {
   const ordered = [...rows].sort((a,b)=>newestFirst ? (b.date||'').localeCompare(a.date||'') : (a.date||'').localeCompare(b.date||''));
-  return `<ul>${ordered.map(row=>`<li>${financeDate(row.date)?financeDateLabel(row.date)+' · ':''}${esc(row.name)} · ${esc(row.label || 'Parcela')} · ${money(row.amount)}</li>`).join('')}</ul>`;
+  return `<ul>${ordered.map(row=>`<li>${financeDate(row.date)?financeDateLabel(row.date)+' · ':''}${esc(row.name)} · ${esc(row.label || 'Parcela')} · ${money(row.amount)}${row.late?' · <strong>Em atraso</strong>':''}</li>`).join('')}</ul>`;
 }
 
 function renderCashFlow() {
   const {months,received,receivedUndated,overdue,overdueRows,undated} = cashForecast(state.people,todayLocal());
-  const total = months.reduce((sum,month)=>sum+month.amount,0);
+  const total = months.reduce((sum,month)=>sum+month.amount-month.late,0);
   const receivedTotal = [...received.values()].reduce((sum,rows)=>sum+cashTotal(rows),cashTotal(receivedUndated));
   const peak = Math.max(1,...months.map(month=>month.amount));
   return `<header><div><div class="tag">Financeiro da mentoria</div><h2>Fluxo de caixa</h2>
-    <p class="muted">Acompanhe o histórico recebido e as parcelas a vencer nos próximos 12 meses, incluindo o mês atual.</p></div></header>
+    <p class="muted">Acompanhe os recebimentos e as parcelas em aberto do mês atual e dos 11 meses seguintes.</p></div></header>
     <div class="grid">
       <div class="card"><div class="muted">A vencer no período</div><h2>${money(total)}</h2></div>
       <div class="card"><div class="muted">Recebido no histórico</div><h2>${money(receivedTotal)}</h2></div>
       <div class="card"><div class="muted">Em atraso</div><h2>${money(overdue)}</h2>${overdueRows.length?`<details><summary>Ver parcelas em atraso</summary>${cashRows(overdueRows)}</details>`:''}</div>
       <div class="card"><div class="muted">Sem vencimento cadastrado</div><h2>${money(undated)}</h2></div>
     </div>
-    <section class="card"><h3>Parcelas a vencer por mês</h3>
+    <section class="card"><h3>Parcelas em aberto por mês de vencimento</h3>
     ${months.map(month=>`<details style="border-bottom:1px solid #d5d5d5;padding:12px 0">
       <summary style="cursor:pointer"><strong>${cashMonthLabel(month.key)}</strong>
-      · ${money(month.amount)} · ${month.rows.length} parcela(s)</summary>
+      · ${money(month.amount)} em aberto · ${month.rows.length} parcela(s)${month.late?' · '+money(month.late)+' em atraso':''}</summary>
       <meter aria-label="Recebimento previsto em relação ao maior mês" value="${month.amount}" max="${peak}" style="width:100%;height:12px;margin-top:5px"></meter>
-      ${month.rows.length ? cashRows(month.rows) : '<p class="muted">Nenhuma parcela a vencer.</p>'}
+      ${month.rows.length ? cashRows(month.rows) : '<p class="muted">Nenhuma parcela em aberto.</p>'}
     </details>`).join('')}
     </section>
     <section class="card"><h3>Parcelas recebidas por mês</h3>
