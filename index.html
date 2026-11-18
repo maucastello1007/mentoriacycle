@@ -64,17 +64,109 @@ const questions=[
 {id:'investment',title:'Qual é o faturamento mensal médio do seu consultório atualmente?',options:['Até R$ 20 mil','De R$ 20 mil a R$ 50 mil','De R$ 50 mil a R$ 100 mil','De R$ 100 mil a R$ 200 mil','Acima de R$ 200 mil'],chapter:'SEU PRÓXIMO CICLO'}];
 function validateAnswer(index,value){const q=questions[index];if(!q)return 'Pergunta inválida.';if(q.options)return q.options.includes(value)?'':'Selecione uma alternativa para continuar.';if(q.type==='location')return value&&typeof value.city==='string'&&value.city.trim().length>=2&&value.city.length<=100&&states.includes(value.state)?'':'Informe a cidade e selecione o estado.';if(typeof value!=='string')return 'Preencha este campo para continuar.';if(q.type==='tel'){const n=value.replace(/\D/g,'').replace(/^55(?=\d{10,11}$)/,'');return /^[1-9]\d{9,10}$/.test(n)?'':'Informe um WhatsApp válido, com DDD (10 ou 11 dígitos).';}return value.trim().length>=2&&value.trim().length<=120?'':'Informe seu nome, com pelo menos 2 caracteres.';}
 
+const API = 'https://api.infocrescimento.com';
+const FORM_KEY = 'adf22057-9398-428c-b8f1-a14727693f83';
+var CHAVES_UTM = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'id_campaign', 'id_medium', 'id_content'];
+function coletarUtms() {
+  var utms = {};
+  try { utms = JSON.parse(sessionStorage.getItem('lf_utms') || '{}'); } catch (e) {}
+  var parametros = new URLSearchParams(window.location.search);
+  CHAVES_UTM.forEach(function (chave) {
+    var valor = parametros.get(chave);
+    if (valor) utms[chave] = valor;
+  });
+  try { sessionStorage.setItem('lf_utms', JSON.stringify(utms)); } catch (e) {}
+  return utms;
+}
+// fbclid chega na URL do anúncio e some na navegação interna — persiste igual aos UTMs
+function coletarFbclid() {
+  var atual = new URLSearchParams(window.location.search).get('fbclid') || '';
+  try {
+    if (atual) {
+      if (sessionStorage.getItem('lf_fbclid') !== atual) sessionStorage.setItem('lf_fbclid_em', String(Date.now()));
+      sessionStorage.setItem('lf_fbclid', atual);
+    } else {
+      atual = sessionStorage.getItem('lf_fbclid') || '';
+    }
+  } catch (e) {}
+  return atual;
+}
+// _fbp é o cookie de browser do Meta Pixel (só existe se o Pixel estiver na página)
+function lerCookie(nome) {
+  var partes = document.cookie ? document.cookie.split('; ') : [];
+  for (var i = 0; i < partes.length; i++) {
+    if (partes[i].indexOf(nome + '=') === 0) return decodeURIComponent(partes[i].slice(nome.length + 1));
+  }
+  return '';
+}
+// _fbc: usa o cookie do Pixel; sem Pixel na página, monta no formato que a
+// Conversions API espera (fb.1.<quando o clique chegou>.<fbclid>)
+function coletarFbc() {
+  var cookie = lerCookie('_fbc');
+  if (cookie) return cookie;
+  var fbclid = coletarFbclid();
+  if (!fbclid) return '';
+  var criadoEm = '';
+  try { criadoEm = sessionStorage.getItem('lf_fbclid_em') || ''; } catch (e) {}
+  return 'fb.1.' + (criadoEm || String(Date.now())) + '.' + fbclid;
+}
+const gerarIdem = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
+
+
+async function enviarAoCrm(respostas, idem) {
+  const dados = {
+    ...respostas,
+    _gotcha: '',
+    _utm: coletarUtms(),
+    _fbclid: coletarFbclid(),
+    _fbp: lerCookie('_fbp'),
+    _fbc: coletarFbc(),
+    _referrer: document.referrer,
+    _pagina: window.location.href,
+    _idem: idem,
+  };
+
+  const resposta = await fetch(API + '/api/captura/' + FORM_KEY, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+    signal: AbortSignal.timeout(15000),
+  });
+  const corpo = await resposta.json().catch(() => null);
+  if (!resposta.ok || corpo?.sucesso !== true) {
+    throw new Error(corpo?.erro || 'O Leadflow não confirmou o recebimento. Suas respostas continuam aqui. Tente novamente.');
+  }
+  return corpo;
+}
+
+
+coletarUtms();
+coletarFbclid();
+const crmId = gerarIdem();
+const crmKeys = [
+ 'nome', 'whatsapp', 'cidade', 'pacientesnosistema', 'vendehoje', 'programaativo',
+ 'implementouprograma', 'programaretorno', 'perdendodinheiro', 'faturamentohoje',
+];
 const $=id=>document.getElementById(id);
-let current=0,answers={},sending=false,completed=false;
+let current=0,answers=Object.fromEntries(crmKeys.map(key=>[key,''])),sending=false,completed=false;
 const last=questions.length-1;
-const submissionId=crypto.randomUUID ? crypto.randomUUID() : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g,c=>(c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+const submissionId=crypto.randomUUID();
 function read(){const q=questions[current];if(q.options)return document.querySelector('input[name="choice"]:checked')?.value||'';if(q.type==='location')return {city:$('city').value.trim(),state:$('state').value};return $('answer').value.trim();}
-function retain(){answers[questions[current].id]=read();}
-function progress(){const count=questions.filter((q,i)=>!validateAnswer(i,answers[q.id])).length;$('progress-text').textContent=`${count} de ${questions.length} respostas`;$('percent').textContent=Math.round(count/questions.length*100)+'%';$('progress-fill').style.width=count/questions.length*100+'%';document.querySelector('.progress-track').setAttribute('aria-valuenow',count);}
+function retain(){
+ const value=read();
+ answers[crmKeys[current]]=current===2 ? value.city+' - '+value.state : value;
+}
+function answerAt(index){
+ const value=answers[crmKeys[index]];
+ if(index!==2||!value)return value;
+ const separator=value.lastIndexOf(' - ');
+ return {city:value.slice(0,separator),state:value.slice(separator+3)};
+}
+function progress(){const count=questions.filter((q,i)=>!validateAnswer(i,answerAt(i))).length;$('progress-text').textContent=`${count} de ${questions.length} respostas`;$('percent').textContent=Math.round(count/questions.length*100)+'%';$('progress-fill').style.width=count/questions.length*100+'%';document.querySelector('.progress-track').setAttribute('aria-valuenow',count);}
 function clearError(){$('error').textContent='';document.querySelectorAll('[aria-invalid]').forEach(e=>e.removeAttribute('aria-invalid'));}
 function showError(message){$('error').textContent=message;document.querySelector('#answer-area input, #answer-area select')?.setAttribute('aria-invalid','true');}
 function render(focus=true){
- const q=questions[current],value=answers[q.id],area=$('answer-area');area.replaceChildren();$('question-title').textContent=q.title;$('question-description').textContent=q.description||'';$('question-description').hidden=!q.description;$('chapter-name').textContent=q.chapter;$('question-counter').innerHTML=String(current+1).padStart(2,'0')+' <span>/ '+String(questions.length).padStart(2,'0')+'</span>';
+ const q=questions[current],value=answerAt(current),area=$('answer-area');area.replaceChildren();$('question-title').textContent=q.title;$('question-description').textContent=q.description||'';$('question-description').hidden=!q.description;$('chapter-name').textContent=q.chapter;$('question-counter').innerHTML=String(current+1).padStart(2,'0')+' <span>/ '+String(questions.length).padStart(2,'0')+'</span>';
  if(q.options){const group=document.createElement('fieldset');group.className='options';group.style.border='0';group.style.padding='0';group.style.margin='0';const legend=document.createElement('legend');legend.className='sr-only';legend.textContent=q.title;group.append(legend);q.options.forEach((option,i)=>{const label=document.createElement('label');label.className='option';const radio=document.createElement('input');radio.type='radio';radio.name='choice';radio.value=option;radio.checked=value===option;radio.required=true;const letter=document.createElement('span');letter.className='letter';letter.textContent=String.fromCharCode(65+i);letter.setAttribute('aria-hidden','true');const text=document.createElement('span');text.className='option-text';text.textContent=option;const check=document.createElement('span');check.className='check';check.textContent='✓';check.setAttribute('aria-hidden','true');label.append(radio,letter,text,check);group.append(label);});area.append(group);
  }else if(q.type==='location'){const grid=document.createElement('div');grid.className='location-grid';grid.innerHTML='<label><span class="field-label">Cidade</span><input id="city" type="text" maxlength="100" autocomplete="address-level2" placeholder="Sua cidade" required></label><label><span class="field-label">Estado</span><select id="state" autocomplete="address-level1" required><option value="">UF</option></select></label>';area.append(grid);$('city').value=value?.city||'';states.forEach(uf=>$('state').add(new Option(uf,uf)));$('state').value=value?.state||'';
  }else{const input=document.createElement('input');input.id='answer';input.type=q.type;input.autocomplete=q.type==='tel'?'tel':'name';input.inputMode=q.type==='tel'?'tel':'text';input.placeholder=q.placeholder;input.maxLength=q.type==='tel'?22:120;input.required=true;input.setAttribute('aria-labelledby','question-title');input.setAttribute('aria-describedby','question-description error');input.value=value||'';area.append(input);}
@@ -82,8 +174,62 @@ function render(focus=true){
  $('question').style.animation='none';void $('question').offsetWidth;$('question').style.animation='';progress();if(focus){$('question-title').focus({preventScroll:true});$('question').scrollIntoView({block:'nearest',behavior:'instant'});}
 }
 function busy(value){sending=value;$('next').disabled=value;$('previous').disabled=value||current===0;$('forward').disabled=value||current===last;$('answer-area').querySelectorAll('input,select').forEach(input=>input.disabled=value);$('next').textContent=value?'Enviando…':current===last?'Enviar aplicação':'Continuar';}
-async function advance(){if(sending||completed)return;retain();const error=validateAnswer(current,answers[questions[current].id]);if(error){showError(error);return;}if(current<last){current++;render();return;}const invalid=questions.findIndex((q,i)=>validateAnswer(i,answers[q.id]));if(invalid>=0){current=invalid;render();showError('Confira esta resposta.');return;}if(!CYCLE_CONFIG.endpoint){showError('O envio ainda não está disponível. Por favor, tente novamente mais tarde.');return;}busy(true);clearError();const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),15000);try{const response=await fetch(CYCLE_CONFIG.endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:submissionId,answers}),signal:controller.signal});const result=await response.json();if(!response.ok||!result.ok)throw new Error('Envio não confirmado');completed=true;progress();$('application').hidden=true;document.querySelector('.chapter').hidden=true;$('success').hidden=false;$('receipt').textContent='Protocolo: '+result.id.slice(0,8).toUpperCase();document.querySelector('.navigation').hidden=true;const title=$('success').querySelector('h1');title.tabIndex=-1;title.focus();answers={};}catch(error){showError(error.name==='AbortError'?'O envio demorou mais que o esperado. Suas respostas continuam aqui. Tente novamente.':'Não foi possível confirmar o envio. Suas respostas continuam aqui. Tente novamente.');}finally{clearTimeout(timer);if(!completed)busy(false);}}
-$('application').addEventListener('submit',e=>{e.preventDefault();void advance();});$('previous').addEventListener('click',()=>{if(current>0&&!sending){retain();current--;render();}});$('forward').addEventListener('click',()=>void advance());
+async function advance(){
+ if(sending||completed)return;
+ retain();
+ const error=validateAnswer(current,answerAt(current));
+ if(error){showError(error);return;}
+ if(current<last){current++;render();return;}
+ const invalid=questions.findIndex((q,i)=>validateAnswer(i,answerAt(i)));
+ if(invalid>=0){current=invalid;render();showError('Confira esta resposta.');return;}
+
+ busy(true);
+ clearError();
+ try{
+  const painel=Object.fromEntries(questions.map((q,i)=>[q.id,answerAt(i)]));
+  const response=await fetch(CYCLE_CONFIG.endpoint,{
+   method:'POST',
+   headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({id:submissionId,answers:painel}),
+   signal:AbortSignal.timeout(15000),
+  });
+  const result=await response.json();
+  if(!response.ok||!result.ok)throw new Error(result.message||'Não foi possível confirmar a aplicação.');
+  const corpo=await enviarAoCrm(answers,crmId);
+  try{
+   window.fbq?.('track','Lead');
+   window.fbq?.('trackCustom','Leadcycle');
+  }catch{
+   // A falha do Pixel não altera o resultado da aplicação.
+  }
+  if(corpo?.redirect_url){
+   const redirect=new URL(corpo.redirect_url,window.location.href);
+   if(['https:','http:'].includes(redirect.protocol)){
+    window.location.href=redirect.href;
+    completed=true;
+    return;
+   }
+  }
+  completed=true;
+  progress();
+  $('application').hidden=true;
+  document.querySelector('.chapter').hidden=true;
+  $('success').hidden=false;
+  $('receipt').textContent='Protocolo: '+result.id.slice(0,8).toUpperCase();
+  document.querySelector('.navigation').hidden=true;
+  const title=$('success').querySelector('h1');
+  title.tabIndex=-1;
+  title.focus();
+ }catch(error){
+  showError(error.name==='TimeoutError'
+   ? 'O envio demorou mais que o esperado. Suas respostas continuam aqui. Tente novamente.'
+   : error instanceof TypeError ? 'Não foi possível enviar. Suas respostas continuam aqui. Tente novamente.'
+   : error.message||'Não foi possível enviar');
+ }finally{
+  if(!completed)busy(false);
+ }
+}
+$('application').addEventListener('submit',e=>{e.preventDefault();void advance();});$('previous').addEventListener('click',()=>{if(current>0&&!sending&&!completed){retain();current--;render();}});$('forward').addEventListener('click',()=>void advance());
 $('answer-area').addEventListener('input',()=>{retain();clearError();progress();});$('answer-area').addEventListener('change',()=>{retain();clearError();progress();});
 document.addEventListener('keydown',e=>{if(e.altKey||e.ctrlKey||e.metaKey||sending||completed)return;const tag=e.target.tagName;if(['INPUT','SELECT','TEXTAREA','BUTTON'].includes(tag))return;const q=questions[current];if(e.key==='Enter'){e.preventDefault();void advance();}else if(q.options&&/^[a-f]$/i.test(e.key)){const index=e.key.toUpperCase().charCodeAt(0)-65;const radio=document.querySelectorAll('input[name="choice"]')[index];if(radio){e.preventDefault();radio.checked=true;retain();clearError();progress();}}});
 render(false);
